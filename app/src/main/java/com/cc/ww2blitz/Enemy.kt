@@ -94,6 +94,7 @@ class Enemy {
 
   companion object {
     const val FLIGHT_PROFILE_SWEEP_ARC = 101
+    const val FLIGHT_PROFILE_ORBIT_ESCORT = 102
     const val SHUDDER_DURATION = 0.08f
     const val SHUDDER_AMPLITUDE = 2.0f
     const val AIM_SLOP_RAD = 0.15f

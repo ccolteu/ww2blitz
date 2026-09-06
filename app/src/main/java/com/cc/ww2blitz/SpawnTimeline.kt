@@ -42,11 +42,16 @@ class SpawnTimeline {
       if (!cue.bossCueFired) {
         elapsedTime += dt
         val introSecs = def.introSecs
+        if (elapsedTime >= introSecs - ORBIT_UFO_EXIT_LEAD) {
+          enemyManager.beginOrbitHeavyExit()
+        }
         if (allowBoss && elapsedTime >= introSecs) {
           cue.fireBoss(def.id, boss)
           elapsedTime = introSecs
         }
       }
+      val dir = if (def.id >= 0 && def.id < directors.size) directors[def.id] else null
+      dir?.tick(dt, elapsedTime, enemyManager, w, h, boss, allowBoss, stageData, cue)
       HiddenMedalRoute.bind(activeStage)
       HiddenMedalRoute.tick(elapsedTime, w, h, PowerUpManager.instance.items)
       return
@@ -119,5 +124,6 @@ class SpawnTimeline {
 
   private companion object {
     const val MID_EXIT_LEAD = 4.5f
+    const val ORBIT_UFO_EXIT_LEAD = 3.4f
   }
 }

@@ -35,6 +35,9 @@ class EnemyPoolManager(private val resources: Resources) {
   private var tankSheet: Bitmap? = null
   private var wagonSheet: Bitmap? = null
   private var helicopterSheet: Bitmap? = null
+  private var kamiSheet: Bitmap? = null
+  private var interceptorSkin: Bitmap? = null
+  private var heavySkin: Bitmap? = null
   private val halfW = FloatArray(TYPE_COUNT)
   private val halfH = FloatArray(TYPE_COUNT)
   private var screenW = 0f
@@ -97,10 +100,27 @@ class EnemyPoolManager(private val resources: Resources) {
 
   fun halfHOf(e: Enemy): Float = halfHOf(e.type) * drawScaleOf(e)
 
+  fun orbitScaleOf(type: Int): Float {
+    if (type == TYPE_KAMIKAZE && kamiSheet != null) return ORBIT_SAUCER_SCALE
+    if (type == TYPE_INTERCEPTOR && interceptorSkin != null) return ORBIT_PICKET_SCALE
+    if (type == TYPE_HEAVY && heavySkin != null) return ORBIT_UFO_SCALE
+    return 1f
+  }
+
+  private fun isOrbitEscort(e: Enemy): Boolean {
+    if (e.isMidBoss || e.isGroundHeavy() || e.isHelicopter) return false
+    return when (e.type) {
+      TYPE_KAMIKAZE -> kamiSheet != null
+      TYPE_INTERCEPTOR -> interceptorSkin != null
+      TYPE_HEAVY -> heavySkin != null
+      else -> false
+    }
+  }
+
   private fun drawScaleOf(e: Enemy): Float {
     if (e.isMidBoss) return MID_DRAW_SCALE
     if (e.isLandVehicle || e.isWagon) return GROUND_DRAW_SCALE
-    return 1f
+    return orbitScaleOf(e.type)
   }
 
   fun deactivateAll() {
@@ -147,6 +167,7 @@ class EnemyPoolManager(private val resources: Resources) {
     isWagon: Boolean = false,
     isHelicopter: Boolean = false,
     isMidBoss: Boolean = false,
+    flankSign: Float = 0f,
   ) {
     synchronized(lock) {
       for (i in 0 until POOL_SIZE) {
@@ -182,6 +203,7 @@ class EnemyPoolManager(private val resources: Resources) {
         e.diamondWingSign = 0f
         if (spawnCue == SpawnEvent.CUE_DIAMOND_WING_L) e.diamondWingSign = -1f
         if (spawnCue == SpawnEvent.CUE_DIAMOND_WING_R) e.diamondWingSign = 1f
+        if (spawnCue == 0 && flankSign != 0f) e.diamondWingSign = flankSign
         e.splinterVeer = false
         e.shudderTimer = 0f
         e.isActive = true
@@ -213,6 +235,24 @@ class EnemyPoolManager(private val resources: Resources) {
       }
       return false
     }
+  }
+
+  /** Send orbit escorts off the sides before the fortress takes the top. */
+  fun beginOrbitEscortExit() {
+    synchronized(lock) {
+      var i = 0
+      while (i < POOL_SIZE) {
+        val e = pool[i]
+        if (e.isActive && e.flightProfile == Enemy.FLIGHT_PROFILE_ORBIT_ESCORT && e.aiPhase < 2) {
+          startOrbitSwipe(e)
+        }
+        i++
+      }
+    }
+  }
+
+  fun beginOrbitHeavyExit() {
+    beginOrbitEscortExit()
   }
 
   /** Send living captains off the bottom so the fortress can take the top of the screen. */
@@ -265,6 +305,10 @@ class EnemyPoolManager(private val resources: Resources) {
           updateSweepArc(e, dt, w, h)
           continue
         }
+        if (e.flightProfile == Enemy.FLIGHT_PROFILE_ORBIT_ESCORT) {
+          updateOrbitEscort(e, dt, w, h, playerX, playerY)
+          continue
+        }
         if (e.type == TYPE_KAMIKAZE && kamikazeSeeks()) {
           e.steerToward(playerX, playerY, dt, Enemy.KAMI_TURN_RATE)
         }
@@ -296,6 +340,7 @@ class EnemyPoolManager(private val resources: Resources) {
           continue
         }
         if (e.type == TYPE_KAMIKAZE) continue
+        if (isOrbitEscort(e)) continue
         updateEnemyFire(e, dt, playerX, playerY, weapons, speed)
       }
     }
@@ -316,6 +361,77 @@ class EnemyPoolManager(private val resources: Resources) {
     e.diamondLeader = false
     e.diamondWingSign = 0f
     e.splinterVeer = false
+  }
+
+  private fun startOrbitSwipe(e: Enemy) {
+    e.aiPhase = 2
+    e.flightTime = 0f
+    if (e.diamondWingSign == 0f) {
+      e.diamondWingSign = if (e.x >= screenW * 0.5f) 1f else -1f
+    }
+  }
+
+  private fun updateOrbitEscort(
+    e: Enemy,
+    dt: Float,
+    screenW: Float,
+    screenH: Float,
+    playerX: Float,
+    playerY: Float,
+  ) {
+    val ew = halfWOf(e)
+    val eh = halfHOf(e)
+    if (e.aiPhase >= 2) {
+      e.flightTime += dt
+      val t = e.flightTime
+      val side = if (e.diamondWingSign < 0f) -1f else 1f
+      val rush = if (t > 0.55f) 1f else t / 0.55f
+      e.vx = side * (160f + 500f * rush)
+      e.vy = -170f * kotlin.math.exp(-t * 2.4f)
+      e.x += e.vx * dt
+      e.y += e.vy * dt
+      if (e.x - ew > screenW || e.x + ew < 0f || e.y + eh < 0f) {
+        recycleEnemy(e)
+      }
+      return
+    }
+    val flank = if (e.diamondWingSign < 0f) -1f else 1f
+    val pad = ew * 1.05f + screenW * 0.18f
+    var tx = playerX + flank * pad
+    val lead = eh * 0.35f + 48f
+    var ty = playerY - lead
+    val minX = ew + 18f
+    val maxX = screenW - ew - 18f
+    if (tx < minX) tx = minX
+    if (tx > maxX) tx = maxX
+    val minY = screenH * 0.22f
+    val maxY = screenH * 0.78f
+    if (ty < minY) ty = minY
+    if (ty > maxY) ty = maxY
+    val dx = tx - e.x
+    val dy = ty - e.y
+    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+    val chase = if (e.aiPhase == 0) ORBIT_RISE_GAIN else ORBIT_FLANK_GAIN
+    var spd = dist * chase
+    val cap = if (e.aiPhase == 0) ORBIT_RISE_CAP else ORBIT_FLANK_CAP
+    if (spd > cap) spd = cap
+    if (dist > 4f) {
+      e.vx = dx / dist * spd
+      e.vy = dy / dist * spd
+    } else {
+      e.vx = 0f
+      e.vy = 0f
+    }
+    e.x += e.vx * dt
+    e.y += e.vy * dt
+    if (e.aiPhase == 0 && dist < kotlin.math.max(ew, 42f)) {
+      e.aiPhase = 1
+      e.holdTimer = if (e.type == TYPE_HEAVY) ORBIT_UFO_ESCORT_SEC else ORBIT_ESCORT_SEC
+    }
+    if (e.aiPhase == 1) {
+      e.holdTimer -= dt
+      if (e.holdTimer <= 0f) startOrbitSwipe(e)
+    }
   }
 
   private fun updateSweepArc(e: Enemy, dt: Float, screenW: Float, screenH: Float) {
@@ -402,12 +518,15 @@ class EnemyPoolManager(private val resources: Resources) {
     val heavyHold = e.type == TYPE_HEAVY
     val s3AirHeavy = heavyHold && !e.isGroundHeavy() &&
       StageData.liveInstance?.def?.airHeavyHighHold == true
+    val orbitUfo = heavyHold && isOrbitEscort(e)
     val holdY = screenH * if (e.isMidBoss && e.isGroundHeavy()) {
       MID_DESTROYER_HOLD_Y_FRAC
     } else if (e.isMidBoss) {
       MID_HOLD_Y_FRAC
     } else if (e.isGroundHeavy()) {
       DESTROYER_HOLD_Y_FRAC
+    } else if (orbitUfo) {
+      ORBIT_UFO_HOLD_Y_FRAC
     } else if (s3AirHeavy) {
       S3_AIR_HEAVY_HOLD_Y_FRAC
     } else if (heavyHold) {
@@ -428,6 +547,8 @@ class EnemyPoolManager(private val resources: Resources) {
             MID_HOLD_SEC
           } else if (e.isGroundHeavy()) {
             DESTROYER_HOLD_SEC
+          } else if (orbitUfo) {
+            ORBIT_UFO_HOLD_SEC
           } else if (s3AirHeavy) {
             S3_AIR_HEAVY_HOLD_SEC
           } else if (heavyHold) {
@@ -446,6 +567,8 @@ class EnemyPoolManager(private val resources: Resources) {
             MID_RETREAT_VY
           } else if (e.isGroundHeavy()) {
             DESTROYER_RETREAT_VY
+          } else if (orbitUfo) {
+            ORBIT_UFO_RETREAT_VY
           } else if (s3AirHeavy) {
             S3_AIR_HEAVY_RETREAT_VY
           } else if (heavyHold) {
@@ -672,6 +795,12 @@ class EnemyPoolManager(private val resources: Resources) {
       helicopterSheet ?: base
     } else if (e.isRedShipAnchor) {
       droneRedSheet ?: base
+    } else if (e.type == TYPE_KAMIKAZE) {
+      kamiSheet ?: base
+    } else if (e.type == TYPE_INTERCEPTOR) {
+      interceptorSkin ?: base
+    } else if (e.type == TYPE_HEAVY) {
+      heavySkin ?: base
     } else {
       base
     }
@@ -685,14 +814,22 @@ class EnemyPoolManager(private val resources: Resources) {
     }
     canvas.save()
     canvas.translate(drawX, e.y)
-    canvas.rotate(180f)
+    val escortUp = e.flightProfile == Enemy.FLIGHT_PROFILE_ORBIT_ESCORT
+    canvas.rotate(if (escortUp) 0f else 180f)
     val ew = halfWOf(e)
     val eh = halfHOf(e)
     drawRect.set(-ew, -eh, ew, eh)
-    // Local +x/+y is screen up-left after 180°, so negate for a screen down-right shadow.
-    drawRect.offset(-SHADOW_PX.toFloat(), -SHADOW_PX.toFloat())
+    if (escortUp) {
+      drawRect.offset(SHADOW_PX.toFloat(), SHADOW_PX.toFloat())
+    } else {
+      drawRect.offset(-SHADOW_PX.toFloat(), -SHADOW_PX.toFloat())
+    }
     canvas.drawBitmap(sheet, null, drawRect, shadowPaint)
-    drawRect.offset(SHADOW_PX.toFloat(), SHADOW_PX.toFloat())
+    if (escortUp) {
+      drawRect.offset(-SHADOW_PX.toFloat(), -SHADOW_PX.toFloat())
+    } else {
+      drawRect.offset(SHADOW_PX.toFloat(), SHADOW_PX.toFloat())
+    }
     var oy = -OUTLINE_PX
     while (oy <= OUTLINE_PX) {
       var ox = -OUTLINE_PX
@@ -725,6 +862,9 @@ class EnemyPoolManager(private val resources: Resources) {
     tankSheet = null
     wagonSheet = null
     helicopterSheet = null
+    kamiSheet = null
+    interceptorSkin = null
+    heavySkin = null
   }
 
   private fun typeIndex(type: Int): Int =
@@ -746,11 +886,17 @@ class EnemyPoolManager(private val resources: Resources) {
     destroyer: Bitmap?,
     wagon: Bitmap?,
     helicopter: Bitmap? = null,
+    kami: Bitmap? = null,
+    interceptor: Bitmap? = null,
+    heavy: Bitmap? = null,
   ) {
     tankSheet = tank
     destroyerSheet = destroyer
     wagonSheet = wagon
     helicopterSheet = helicopter
+    kamiSheet = kami
+    interceptorSkin = interceptor
+    heavySkin = heavy
   }
 
   private fun loadKeyed(drawableId: Int): Bitmap {
@@ -781,6 +927,15 @@ class EnemyPoolManager(private val resources: Resources) {
     const val HEAVY_HOLD_Y_FRAC = 0.25f
     const val HEAVY_HOLD_SEC = 5f
     const val HEAVY_RETREAT_VY = -160f
+    const val ORBIT_UFO_HOLD_Y_FRAC = 0.54f
+    const val ORBIT_UFO_HOLD_SEC = 1.35f
+    const val ORBIT_UFO_RETREAT_VY = 520f
+    const val ORBIT_RISE_GAIN = 3.4f
+    const val ORBIT_FLANK_GAIN = 5.2f
+    const val ORBIT_RISE_CAP = 420f
+    const val ORBIT_FLANK_CAP = 280f
+    const val ORBIT_ESCORT_SEC = 1.85f
+    const val ORBIT_UFO_ESCORT_SEC = 2.6f
     const val S3_AIR_HEAVY_HOLD_Y_FRAC = 0.16f
     const val S3_AIR_HEAVY_HOLD_SEC = 2.2f
     const val S3_AIR_HEAVY_RETREAT_VY = -280f
@@ -796,6 +951,9 @@ class EnemyPoolManager(private val resources: Resources) {
     const val MID_DESTROYER_HOLD_Y_FRAC = 0.46f
     const val MID_RETREAT_VY = 620f
     const val MID_DRAW_SCALE = 1.55f
+    const val ORBIT_SAUCER_SCALE = 1.48f
+    const val ORBIT_PICKET_SCALE = 1.28f
+    const val ORBIT_UFO_SCALE = 0.86f
     const val BURST_EXTRA = 2
     const val BURST_GAP = 0.10f
     const val SCOUT_REFIRE = 0.85f

@@ -1,8 +1,8 @@
 # WW2 Blitz
 
-Portrait Android shoot-’em-up (`com.cc.ww2blitz`), version **1.0.5**. One fighter, eight timed stages, peelable bosses. Maps are composed (`StageDef` + director + theater/boss kit), not subclassed from a `BaseLevel`. The product is a 1990s arcade cabinet: attract while idle, one linear credit, briefing cards, time-scripted waves, a tiny hitbox, a panic bomb, a recap ticker, and three-letter name entry.
+Portrait Android shoot-’em-up (`com.cc.ww2blitz`), version **1.0.6**. One fighter, eight timed stages, peelable bosses. Maps are composed (`StageDef` + director + theater/boss kit), not subclassed from a `BaseLevel`. The product is a 1990s arcade cabinet: attract while idle, one linear credit, briefing cards, time-scripted waves, a tiny hitbox, a panic bomb, a recap ticker, and three-letter name entry.
 
-**Play Store.** Mid-stage captains now hold the Atlantic, Frozen Front, Coral Atoll, and Jungle — a destroyer, tank, heavy, and helicopter that dive off before the fortress takes the screen.
+**Play Store.** Orbit Threshold is an ascent: mute alien escorts rise from the bottom, flank you in three pairs, swipe off the sides, then the fortress takes the sky.
 
 The software is a Kotlin engine on one `SurfaceView`, clocked by `Choreographer`. Combat is not a Compose tree. The hot path does not allocate.
 
@@ -84,6 +84,7 @@ This is the full inventory. Nothing in the engine is “just a UI preference”;
 | 61 | Maps must not share a song | `bgm_stage1`…`8` on `StageDef.stageMusicTrack` | [Audio](#27-audio) |
 | 62 | Peel must change the pot | Warning sting + `bgm_boss` / `bgm_boss2` when the core opens | [Audio](#27-audio) |
 | 63 | Mid-stage armor without a ninth map | Captain `isMidBoss` on 3–6; dive off before fortress; no second peel | [Director](#18-time-scripted-director) |
+| 65 | Orbit must feel like an ascent, not an empty gate | Mute escort pairs (`FLIGHT_PROFILE_ORBIT_ESCORT`); `introOnly` still ticks the director | [Director](#18-time-scripted-director) |
 
 ```mermaid
 flowchart TB
@@ -266,7 +267,7 @@ Campaign maps as coded:
 | 5 | CORAL ATOLL | SCROLL + keyed cloud/spray overlays | ATOLL | `bgm_stage5` | ~220 | ~40 s (shared cue; clock freezes) |
 | 6 | JUNGLE RUINS | SCROLL + helicopter skin | JUNGLE | `bgm_stage6` | ~310 | ~45 s (shared cue; clock freezes) |
 | 7 | ASCENT CANOPY | FACILITY + wagon skin | CANOPY | `bgm_stage7` | 280 → 0 | ~45 s (director cue; clock freezes) |
-| 8 | ORBIT THRESHOLD | ASCENT | ORBIT | `bgm_stage8` | envelope | **5 s** intro-only, no grunts |
+| 8 | ORBIT THRESHOLD | ASCENT | ORBIT | `bgm_stage8` | envelope | **14.5 s** three mute escort pairs (saucers, pickets, UFOs), then fortress |
 
 **To mix and match**
 
@@ -448,11 +449,11 @@ Then `STAGE_SEQUENCE = intArrayOf(3, 8, 6, 6)`. No new director class if the wav
 
 **Need.** Designers said “at 8 seconds, a V.” If the next wave waited until the screen was empty, experts skipped content and novices stalled. A hitch must not double-fire a wave.
 
-**Choice.** `SpawnTimeline` is a thin elapsed-time clock. Each map’s waves live on a `StageDirector` looked up by catalog id (`StageDirectors.table()[id]`). Maps with `locksElapsedAtBoss` freeze the clock at the gate. Maps with `introOnly` run a short intro then cue that def’s boss. Shared spawn helpers sit on `FormationSpawner`.
+**Choice.** `SpawnTimeline` is a thin elapsed-time clock. Each map’s waves live on a `StageDirector` looked up by catalog id (`StageDirectors.table()[id]`). Maps with `locksElapsedAtBoss` freeze the clock at the gate. Maps with `introOnly` run a short director script then cue that def’s boss. Shared spawn helpers sit on `FormationSpawner`.
 
 **Why.** Clock = cabinet rhythm. Latch = one-shot even if `elapsedTime` jumps the threshold. Freeze = the fortress is the content. A new map is another director object, not a subclass of the whole engine, and not a wave DSL.
 
-**Implementation.** `update` reads `StageCatalog.get(activeStage)`. `introOnly`: increment until `introSecs`, `DirectorCue.fireBoss(def.id)`, latch, return. Else increment unless `locksElapsedAtBoss && bossCueFired`. Opening power-V when `usesOpeningPowerV`. Shared boss cue when `usesSharedBossEntranceCue` at `def.bossAtSeconds` (campaign 1–6). Stage 7 fires from its director at the same moment it ramps scroll to 0. Drip loops still honor `MAX_ACTIVE`; latched formations ignore the cap. Maps 3–6 spawn one `isMidBoss` heavy (destroyer skin on 3, tank on 4, helicopter on 6) and skip new drip while it is alive; it holds then dives off the bottom. The fortress cue waits until that captain is gone (forced off ~4.5 s before `bossAtSeconds`). Stage 6 wall/V still follow the helicopter. `reset()` zeros the clock, the cue, and each bound director. Side/cross beats use `spawnSideCross` / `PATTERN_DIAGONAL_SWEEP` at mid Y so a parked dual stream is not a full-width broom.
+**Implementation.** `update` reads `StageCatalog.get(activeStage)`. `introOnly`: increment until `introSecs`, tick that map’s director, `DirectorCue.fireBoss(def.id)`, latch, return. Else increment unless `locksElapsedAtBoss && bossCueFired`. Opening power-V when `usesOpeningPowerV`. Shared boss cue when `usesSharedBossEntranceCue` at `def.bossAtSeconds` (campaign 1–6). Stage 7 fires from its director at the same moment it ramps scroll to 0. Drip loops still honor `MAX_ACTIVE`; latched formations ignore the cap. Maps 3–6 spawn one `isMidBoss` heavy (destroyer skin on 3, tank on 4, helicopter on 6) and skip new drip while it is alive; it holds then dives off the bottom. The fortress cue waits until that captain is gone (forced off ~4.5 s before `bossAtSeconds`). Stage 6 wall/V still follow the helicopter. Stage 8 (`ORBIT_INTRO`) is still `introOnly` (~14.5 s): three mute flank pairs (saucers, pickets, UFOs) rise from the bottom, sit off the player’s sides, swipe off the sides (`beginOrbitEscortExit` ~3.4 s before the cue), then the orbit fortress. No secret medals on that map; escorts drop no loot and do not ram. `reset()` zeros the clock, the cue, and each bound director. Side/cross beats use `spawnSideCross` / `PATTERN_DIAGONAL_SWEEP` at mid Y so a parked dual stream is not a full-width broom.
 
 ---
 
@@ -468,7 +469,7 @@ Then `STAGE_SEQUENCE = intArrayOf(3, 8, 6, 6)`. No new director class if the wav
 
 Hull HP: drones 1, kami 2, interceptors 6, heavies 10, mid-boss captains 96, Stage 7 heavies 32.
 
-Jobs by stage: Stage 1 teach (sweep V that drops **P**, flanks, hold V, weaves at 14/86% width, mid-Y cross at 16 s, twin heavies). Stage 2 deny camping (pincers, death-clear heavies, diamond, a rest, then tanks at 30%/70% width, then walls). Stage 3 scouts, mid cross, destroyer captain (~12 s), flanks if the captain is already gone, recovery wall ~38 s, fortress ~42 s. Stage 4 snow-lane weaves, tank captain (~20 s), then kami / cross / wall before the fortress. Stage 5 reef weaves, reef captain (~18.5 s), then kami / cross / wall before the helipad. Stage 6 width, weaves, helicopter captain (~22 s), then kami / walls / hold-V before the fortress. Stage 7 facility drizzle, kami V, left gunship, wagons (then a rest), right gunship, power, kami wall, freeze. Stage 8 empty. Tanks, destroyers, and wagons are theater skins of `TYPE_HEAVY` + `isGroundHeavy()`; the Jungle captain uses `isHelicopter` (`skin_hellicopter.png`); captains use `isMidBoss` (1.55× blit, aimed fan, medal dump + **B**/**P**).
+Jobs by stage: Stage 1 teach (sweep V that drops **P**, flanks, hold V, weaves at 14/86% width, mid-Y cross at 16 s, twin heavies). Stage 2 deny camping (pincers, death-clear heavies, diamond, a rest, then tanks at 30%/70% width, then walls). Stage 3 scouts, mid cross, destroyer captain (~12 s), flanks if the captain is already gone, recovery wall ~38 s, fortress ~42 s. Stage 4 snow-lane weaves, tank captain (~20 s), then kami / cross / wall before the fortress. Stage 5 reef weaves, reef captain (~18.5 s), then kami / cross / wall before the helipad. Stage 6 width, weaves, helicopter captain (~22 s), then kami / walls / hold-V before the fortress. Stage 7 facility drizzle, kami V, left gunship, wagons (then a rest), right gunship, power, kami wall, freeze. Stage 8 ascent escort: `FLIGHT_PROFILE_ORBIT_ESCORT`, three pairs only (saucers at 2 s, pickets at 5 s, UFOs at 8 s), nose-up blit, mute guns, no ram, no coin drops, side swipe, fortress at 14.5 s. Tanks, destroyers, and wagons are theater skins of `TYPE_HEAVY` + `isGroundHeavy()`; the Jungle captain uses `isHelicopter` (`skin_hellicopter.png`); Orbit Threshold uses `skin_saucer.png` / `skin_picket.png` / `skin_ufo.png` on kami / interceptor / heavy. Captains use `isMidBoss` (1.55× blit, aimed fan, medal dump + **B**/**P**).
 
 Deliberately not done: steering groups, twelve enemy classes, random scatter inside a wave shape, spawn when pool full.
 
@@ -533,7 +534,7 @@ Part HP as coded: plane wings 70 / turret 58 / core 240; tank treads 100 / turre
 
 **Why.** Uniform width-lock is how a 1080-wide PNG covers a 1600-wide tablet without shearing the ascent stack into a parallelogram. Leaving ascent **unscaled** was meant to protect that column, but `blit` stamps at `x = 0` in native pixels; on a phone ~1080 it filled the glass, on a wide tablet it left a hole where the hardware canvas still showed the title still. Z-order is the 1942 “you fly under the bridge” trick. A still title is an attract card. Theater kind, not map id, picks the blit path so a second facility map keeps the roof.
 
-**Implementation.** `StageTheater` decodes from `assets/stages/N/` via `StageBitmaps` (`widthLock = screenW` on floor, mid, high, canopy, and `floor_alt`; briefing and theater skins stay native). Height is `ceil(srcH * screenW / srcW)` — the same uniform scale on Orbit Threshold as on Cloud Fortress. `ParallaxBackground` **borrows** those bitmaps and must not recycle them. Mid/high clouds `PorterDuff.SCREEN`. Facility: floor at `scrollSpeedY`, keyed canopy at 1.5×. Ascent: cloud floor, swap pointer to `floor_alt` at `def.spaceSwapAt` (30 s on map 8), orbit overlay from `def.canopyAt` (35 s on map 8), speed envelope in `updateStage8`. Title: `max(scaleX, scaleY)` into reused `titleDstRect`. Overlay clouds (`hasOverlayClouds`) are a def flag (campaign maps 1, 4, and 5; winter and atoll also set `keyedOverlayLayers` so chroma snow/spray punches to alpha). Grunt blit is two passes: `isGroundHeavy()` (tanks, destroyers, wagons) then airborne (helicopter captains sit in the air pass). Theater skins load with the map kit (`skin_tank.png` on 2 and 4, `skin_destroyer.png` on 3, `skin_hellicopter.png` on 6, wagon on 7).
+**Implementation.** `StageTheater` decodes from `assets/stages/N/` via `StageBitmaps` (`widthLock = screenW` on floor, mid, high, canopy, and `floor_alt`; briefing and theater skins stay native). Height is `ceil(srcH * screenW / srcW)` — the same uniform scale on Orbit Threshold as on Cloud Fortress. `ParallaxBackground` **borrows** those bitmaps and must not recycle them. Mid/high clouds `PorterDuff.SCREEN`. Facility: floor at `scrollSpeedY`, keyed canopy at 1.5×. Ascent: cloud floor, swap pointer to `floor_alt` at `def.spaceSwapAt` (30 s on map 8), orbit overlay from `def.canopyAt` (35 s on map 8), speed envelope in `updateStage8`. Title: `max(scaleX, scaleY)` into reused `titleDstRect`. Overlay clouds (`hasOverlayClouds`) are a def flag (campaign maps 1, 4, and 5; winter and atoll also set `keyedOverlayLayers` so chroma snow/spray punches to alpha). Grunt blit is two passes: `isGroundHeavy()` (tanks, destroyers, wagons) then airborne (helicopter captains sit in the air pass). Theater skins load with the map kit (`skin_tank.png` on 2 and 4, `skin_destroyer.png` on 3, `skin_hellicopter.png` on 6, wagon on 7, `skin_saucer.png` / `skin_picket.png` / `skin_ufo.png` on 8).
 
 ---
 
@@ -561,7 +562,7 @@ Part HP as coded: plane wings 70 / turret 58 / core 240; tank treads 100 / turre
 
 Pickups: **P** increments power to 3; extra **P** at max power pays `POWERUP_FULL_SCORE` (2000) + floating popup (`collectPowerUp`), same pattern as extra **B** at 3 stock (`BOMB_FULL_SCORE` 5000 + popup). Falling wreck medals still score face-up 2000 / edge 200 at Normal, then × dip. Extra **P/B** chance after the medal: base 15% popcorn / 40% armor, × `lootChanceScale()`, then cap 20% / 50%. A mid-boss captain always dumps three medals plus a guaranteed **B** (or **P** if bombs are full) and never fires a revenge pellet. Shield `restoreHits()`. Stage 7 cancel medals during core-kill freeze. Medals **magnet**: within 96 px they slide toward the ship at 420 px/s; in the outer 10% of the screen, if the plane is hugging that same wall, the pull radius is 188 px so rim coins still collect (the sprite clamp cannot kiss the bezel). P/B are unchanged wall-bounce at 30 px.
 
-Hidden route: `HiddenMedalRoute` binds on `resetStage` / timeline tick. Five cues per map (three on Orbit Threshold), `at` seconds + `xFrac`/`yFrac`, mostly rails. `PowerUpItem.spawnSecretMedal` sets `isSecretMedal` and `pickupPoints = 2500` (then × dip on collect). Recap line is `SECRET: N x unit` with that same scaled unit. `armSecretRoute(cueCount)` sets the route length. Center magnet does not reach a rail spawn; hugging that wall does.
+Hidden route: `HiddenMedalRoute` binds on `resetStage` / timeline tick. Five cues per map (none on Orbit Threshold), `at` seconds + `xFrac`/`yFrac`, mostly rails. `PowerUpItem.spawnSecretMedal` sets `isSecretMedal` and `pickupPoints = 2500` (then × dip on collect). Recap line is `SECRET: N x unit` with that same scaled unit. `armSecretRoute(cueCount)` sets the route length. Center magnet does not reach a rail spawn; hugging that wall does.
 
 ---
 

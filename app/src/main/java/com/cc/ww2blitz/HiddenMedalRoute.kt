@@ -98,11 +98,6 @@ object HiddenMedalRoute {
         32f, 0.92f, 0.10f,
         40f, 0.50f, 0.07f,
       )
-      8 -> pack(
-        1.2f, 0.12f, 0.10f,
-        2.6f, 0.88f, 0.10f,
-        3.8f, 0.20f, 0.08f,
-      )
       else -> 0
     }
   }

@@ -146,6 +146,12 @@ object FormationSpawner {
   const val S7_SCROLL_DECAY_AT = 40.0f
   const val S7_SCROLL_DECAY_SPAN = 5.0f
   const val S7_SCROLL_START = 280f
+  const val S8_KAMI_V_AT = 2.0f
+  const val S8_INTERCEPT_AT = 5.0f
+  const val S8_UFO_AT = 8.0f
+  const val S8_UFO_HP = 14
+  const val S8_UFO_VY = 360f
+  const val S8_KAMI_VY = 420f
   const val FORM_CLEAR = 2.4f
 
   fun spawnSideCross(
@@ -184,6 +190,38 @@ object FormationSpawner {
       isHelicopter = isHelicopter,
       isMidBoss = true,
     )
+  }
+
+  fun spawnOrbitEscort(
+    enemies: EnemyPoolManager,
+    w: Float,
+    h: Float,
+    type: Int,
+    hp: Int,
+    xFrac: Float,
+    flankSign: Float,
+  ) {
+    enemies.spawnEnemy(
+      xFrac * w,
+      h + 110f,
+      0f,
+      0f,
+      type,
+      0,
+      hp,
+      flightProfile = Enemy.FLIGHT_PROFILE_ORBIT_ESCORT,
+      flankSign = flankSign,
+    )
+  }
+
+  fun spawnKamiV(enemies: EnemyPoolManager, w: Float, h: Float) {
+    val gapX = formGapX(enemies, TYPE_KAMIKAZE)
+    val gapY = formGapY(enemies, TYPE_KAMIKAZE)
+    val cx = 0.50f * w
+    val cy = -0.04f * h
+    enemies.spawnEnemy(cx, cy, 0f, S8_KAMI_VY, TYPE_KAMIKAZE, 0, KAMI_HP)
+    enemies.spawnEnemy(cx - gapX, cy - gapY, 0f, S8_KAMI_VY, TYPE_KAMIKAZE, 0, KAMI_HP)
+    enemies.spawnEnemy(cx + gapX, cy - gapY, 0f, S8_KAMI_VY, TYPE_KAMIKAZE, 0, KAMI_HP)
   }
 
   fun spawnVFormation(enemies: EnemyPoolManager, w: Float, h: Float) {
@@ -291,8 +329,8 @@ object FormationSpawner {
   }
 
   fun formGapX(enemies: EnemyPoolManager, type: Int): Float =
-    enemies.halfWOf(type) * FORM_CLEAR
+    enemies.halfWOf(type) * enemies.orbitScaleOf(type) * FORM_CLEAR
 
   fun formGapY(enemies: EnemyPoolManager, type: Int): Float =
-    enemies.halfHOf(type) * FORM_CLEAR
+    enemies.halfHOf(type) * enemies.orbitScaleOf(type) * FORM_CLEAR
 }

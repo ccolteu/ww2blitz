@@ -69,6 +69,9 @@ class StageDef(
   val skinDestroyerFile: String? = null,
   val skinWagonFile: String? = null,
   val skinHelicopterFile: String? = null,
+  val skinKamiFile: String? = null,
+  val skinInterceptorFile: String? = null,
+  val skinHeavyFile: String? = null,
   val waveScript: Int,
   val bossCombat: Int,
   val boss: BossKit,
@@ -89,6 +92,9 @@ class StageDef(
   fun skinDestroyerPath(): String? = skinDestroyerFile?.let { asset(it) }
   fun skinWagonPath(): String? = skinWagonFile?.let { asset(it) }
   fun skinHelicopterPath(): String? = skinHelicopterFile?.let { asset(it) }
+  fun skinKamiPath(): String? = skinKamiFile?.let { asset(it) }
+  fun skinInterceptorPath(): String? = skinInterceptorFile?.let { asset(it) }
+  fun skinHeavyPath(): String? = skinHeavyFile?.let { asset(it) }
   fun bossBodyPath(): String = asset(boss.body)
   fun wreckLeftPath(): String = asset(boss.wreckLeft)
   fun wreckRightPath(): String = asset(boss.wreckRight)
@@ -221,11 +227,14 @@ object StageCatalog {
       stageMusicTrack = SoundManager.BGM_STAGE8,
       theaterKind = StageTheaterKind.ASCENT,
       introOnly = true,
-      introSecs = 5f,
+      introSecs = 14.5f,
       spaceSwapAt = 30f,
       canopyAt = 35f,
       canopyFile = "canopy.png",
       floorAltFile = "floor_alt.png",
+      skinKamiFile = "skin_saucer.png",
+      skinInterceptorFile = "skin_picket.png",
+      skinHeavyFile = "skin_ufo.png",
       waveScript = StageWaveKind.ORBIT_INTRO,
       bossCombat = BossCombatKind.ORBIT,
       boss = wrecksTri,

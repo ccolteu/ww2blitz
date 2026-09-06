@@ -1834,6 +1834,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       theater.skinDestroyer,
       theater.skinWagon,
       theater.skinHelicopter,
+      theater.skinKami,
+      theater.skinInterceptor,
+      theater.skinHeavy,
     )
     val floorLayer =
       if (def.theaterKind == StageTheaterKind.ASCENT) theater.activeFloor else theater.floor
@@ -2101,7 +2104,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       var ei = 0
       while (ei < enemyCount) {
         val enemy = enemyPool[ei]
-        if (enemy.isActive) {
+        if (enemy.isActive && enemy.flightProfile != Enemy.FLIGHT_PROFILE_ORBIT_ESCORT) {
           val sx = playerRadius + enemies.halfWOf(enemy) * ramBody
           val sy = playerRadius + enemies.halfHOf(enemy) * ramBody
           if (sx > 0f && sy > 0f) {
@@ -2257,6 +2260,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
   }
 
   private fun dropEnemyLoot(enemy: Enemy) {
+    if (enemy.flightProfile == Enemy.FLIGHT_PROFILE_ORBIT_ESCORT) return
     val x = enemy.x
     val y = enemy.y
     if (enemy.isMidBoss) {
