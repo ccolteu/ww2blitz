@@ -2,8 +2,35 @@ Take the stick. Clear the sky.
 
 WW2 BLITZ is a portrait arcade shooter built like a cabinet: one credit, eight operations, no waiting for a meter to refill. You grab your fighter and the guns stay up. The rest is skill, greed, and whether you save the bomb.
 
-HOW TO FLY
-Touch and hold on the plane. It follows your thumb on a short leash — tight enough for micro-dodges, loose enough that your finger does not sit on the sprite. Let go and you stop shooting. Double-tap to dump a screen-clearing bomb. You start with three lives, and each life takes three hits. Chip damage turns the hull pips gold, then red. The last pip blinks. The next solid hit is a funeral.
+HOW TO FLY — PHONE
+Touch and hold the plane. It follows your thumb on a short leash — tight enough for micro-dodges, loose enough that your finger does not sit on the sprite. Let go and you stop shooting. Double-tap to dump a screen-clearing bomb.
+
+HOW TO FLY — HANDHELD (operator card)
+Built for Retroid Pocket and similar Android cabinets. Hold the unit in portrait with ABXY, Start, and the right stick at the BOTTOM of the glass. That hand stays off the sky.
+
+IN THE SKY
+• Right stick — fly. Nudge to weave, rim to dash.
+• Hold A — vulcan.
+• Press B — bomb (one press).
+
+TITLE (yellow carets)
+• Right stick up / down — walk 1P START, AUDIO, DIFFICULTY, CONTINUE, FIGHTER.
+• A — open the caret row. On 1P START that inserts a credit.
+• Start — always inserts a credit.
+• Y — jump to difficulty. X — jump to fighter. B — jump to audio.
+
+DIP SCREENS
+• Difficulty and Continue — right stick up / down. A (or Start) locks and returns to title.
+• Fighter — right stick left / right (P-38 / Hellcat). A locks and returns.
+• Audio — stick up / down picks BGM or SFX, left / right is volume. A returns.
+
+AFTER A MAP
+• Recap, GAME OVER, CONTINUE? — A or Start.
+• Name entry — right stick bumps the letter, A locks it.
+
+USB Xbox-style pads use the left stick and the same face buttons.
+
+You start with three lives, and each life takes three hits. Chip damage turns the hull pips gold, then red. The last pip blinks. The next solid hit is a funeral.
 
 CHOOSE YOUR FIGHTER
 P-38 Lightning — faster, twin-column vulcan, built to thread patterns.
@@ -12,9 +39,9 @@ F6F Hellcat — heavier, a three-way spread, built to cover the screen.
 Both carry homing missiles once you are fully powered. Pick on the hangar panel; the game remembers.
 
 EIGHT OPERATIONS
-A single campaign. No stage-select grid. CLOUD FORTRESS, IRON TREADS, STEEL ATLANTIC, FROZEN FRONT, CORAL ATOLL, JUNGLE RUINS, ASCENT CANOPY and ORBIT THRESHOLD. Each map has its own music, its own formations, and a fortress that has to come apart before you see the recap. Orbit Threshold is the climb: mute alien escorts rise with you in three pairs — saucers, pickets, UFOs — then peel off so the fortress can own the sky.
+A single campaign. No stage-select grid. CLOUD FORTRESS, IRON TREADS, STEEL ATLANTIC, FROZEN FRONT, CORAL ATOLL, JUNGLE RUINS, ASCENT CANOPY and ORBIT THRESHOLD. Each map has its own music, formations, and a fortress. Orbit Threshold is a mute ascent: three escort pairs, then the fortress.
 
-Mid-campaign, captains take the sky first. A destroyer on the Atlantic, a tank on the Frozen Front, a heavy over the Coral Atoll, a helicopter in the Jungle. They hold, they dump medals, then they dive off so the fortress can own the screen. Leave the title idle and attract mode will fly a demo — tap to steal the stick back.
+Mid-campaign captains (destroyer, tank, heavy, helicopter) hold, dump medals, then dive off. Leave the title idle for attract demo — tap, press a button, or flick the stick to take over.
 
 POWER, MEDALS, GREED
 P items step your shot up to three. Extra P at max power still pays. B restocks bombs; extra B at three in the rack pays more. Every kill drops a spinning medal — catch them face-up if you can, they are the real money. Secret medals sit on timed rails if you know the route. Graze enemy fire for extra points. A panic bomb erases shots in the blast and cooks anything still in the fire.
@@ -29,6 +56,6 @@ CONTINUE is an operator switch — zero, one, or two extra bodies, default off. 
 RANKS
 Local high scores. Initials. No account, no ads, no in-app purchases. Your ranking lives on this device.
 
-Portrait. Offline. Built to be played with one thumb and a bad attitude.
+Portrait. Offline. Thumb or stick.
 
 WW2 BLITZ. Insert one player.

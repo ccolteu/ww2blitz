@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -45,6 +47,18 @@ class MainActivity : Activity() {
       root.addView(view, 0, fill)
       still.bringToFront()
     }
+  }
+
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    val view = gameView
+    if (view != null && view.offerKeyEvent(event)) return true
+    return super.dispatchKeyEvent(event)
+  }
+
+  override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+    val view = gameView
+    if (view != null && view.offerGenericMotion(event)) return true
+    return super.dispatchGenericMotionEvent(event)
   }
 
   override fun onPause() {

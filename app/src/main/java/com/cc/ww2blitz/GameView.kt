@@ -14,6 +14,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
 import android.view.Choreographer
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -57,6 +58,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
   private val openDifficultyButtonRect = RectF()
   private val openFighterSelectButtonRect = RectF()
   private val openContinueButtonRect = RectF()
+  private val startCreditButtonRect = RectF()
   private val continueButtons = Array(3) { RectF() }
   private val continueBackButtonRect = RectF()
   private val difficultyButtons = Array(7) { RectF() }
@@ -93,6 +95,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
   private var availableBombs = START_BOMBS
   private var gameState = STATE_TITLE
   private var isSettingsMenuOpen = false
+  private var settingsAudioRow = 0
+  private var titleMenuIndex = TITLE_ITEM_START
   private var logoBmp: Bitmap? = null
   private var titleBackdropBmp: Bitmap? = null
   var onFirstFramePosted: (() -> Unit)? = null
@@ -114,6 +118,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
   private var grabOffsetY = 0f
   private var isDraggingShip = false
   private var dragPointerId = -1
+  private val cabinetPad = CabinetPad()
   private var awaitingSecondTap = false
   private var enemyBombDmgBank = 0f
   private var bossBombDmgBank = 0f
@@ -240,6 +245,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     isAntiAlias = true
   }
   private val uiStringBuilder = StringBuilder(80)
+  private val menuMarkBuilder = StringBuilder(1)
   private val appVersionName: String
   private val uiSmallPaint = Paint().apply {
     color = Color.WHITE
@@ -283,6 +289,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     holder.addCallback(this)
     isFocusable = true
     isFocusableInTouchMode = true
+    requestFocus()
     setWillNotDraw(true)
     try {
       arcadeTypeface = Typeface.createFromAsset(context.assets, "fonts/arcade_font.ttf")
@@ -300,7 +307,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     popupPaint.typeface = face
     popupShadowPaint.typeface = face
     uiController.bindTypeface(face)
-    var ver = "1.0.5"
+    var ver = "1.0.7"
     try {
       val name = context.packageManager.getPackageInfo(context.packageName, 0).versionName
       if (name != null && name.isNotEmpty()) ver = name
@@ -319,6 +326,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     HighScoreManager.loadHighScores(context)
     running = true
     lastNanos = 0L
+    requestFocus()
     choreographer.postFrameCallback(this)
   }
 
@@ -363,6 +371,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     lastNanos = frameTimeNanos
     when (gameState) {
       STATE_TITLE -> {
+        tickPadMenus(dt)
         if (isSettingsMenuOpen) {
           registrationTextFlashTimer += dt
         } else {
@@ -410,6 +419,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       STATE_REGISTRATION -> {
         tickParallax(TITLE_SCROLL_PX, dt)
         registrationTextFlashTimer += dt
+        tickPadMenus(dt)
       }
       STATE_CAMPAIGN_COMPLETE -> {
         tickParallax(0f, dt)
@@ -425,6 +435,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
         }
       }
       STATE_DIFFICULTY_SELECT, STATE_CHARACTER_SELECT, STATE_CONTINUE_SELECT -> {
+        tickPadMenus(dt)
       }
       else -> {
         if (boss.locksWorldScroll()) {
@@ -437,6 +448,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
           demoPilot(dt)
         } else if (gameState == STATE_PLAYING && dt > 0.0001f) {
           applyShipTether(dt)
+          applyPadSteer(dt)
+          player.setPadFire(cabinetPad.fireHeld)
         }
         player.update(dt)
         if (gameState == STATE_PLAYING && dt > 0.0001f && player.isOnField()) {
@@ -954,10 +967,23 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     val difficultyTagY = difficultyMenuY + tagSubPadding
     val audioMenuY = difficultyMenuY - menuBlockStride
     val startPrompterY = audioMenuY - hudPx(160f)
-    if ((System.currentTimeMillis() / 600L) % 2L == 0L) {
-      uiStringBuilder.setLength(0)
-      uiStringBuilder.append("1P START")
+    val startFocused = titleMenuIndex == TITLE_ITEM_START
+    val startLit = startFocused || (System.currentTimeMillis() / 600L) % 2L == 0L
+    uiStringBuilder.setLength(0)
+    uiStringBuilder.append("1P START")
+    val startW = uiGoldPaint.measureText(uiStringBuilder, 0, uiStringBuilder.length)
+    startCreditButtonRect.set(
+      cx - startW * 0.5f,
+      startPrompterY + uiGoldPaint.ascent(),
+      cx + startW * 0.5f,
+      startPrompterY + uiGoldPaint.descent(),
+    )
+    startCreditButtonRect.inset(-hudPx(60f), -hudPx(30f))
+    if (startLit) {
       drawCenteredHud(canvas, uiStringBuilder, cx, startPrompterY, uiGoldPaint, uiGoldShadowPaint)
+      if (startFocused) {
+        drawMenuFocusMarks(canvas, cx, startPrompterY, startW)
+      }
     }
     uiStringBuilder.setLength(0)
     uiStringBuilder.append("[ AUDIO ]")
@@ -970,6 +996,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       audioMenuY + uiGoldPaint.descent(),
     )
     openSettingsButtonRect.inset(-hudPx(60f), -hudPx(30f))
+    if (titleMenuIndex == TITLE_ITEM_AUDIO) {
+      drawMenuFocusMarks(canvas, cx, audioMenuY, settingsW)
+    }
     uiStringBuilder.setLength(0)
     uiStringBuilder.append("[ DIFFICULTY ]")
     drawCenteredHud(canvas, uiStringBuilder, cx, difficultyMenuY, uiGoldPaint, uiGoldShadowPaint)
@@ -981,6 +1010,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       difficultyMenuY + uiGoldPaint.descent(),
     )
     openDifficultyButtonRect.inset(-hudPx(60f), -hudPx(30f))
+    if (titleMenuIndex == TITLE_ITEM_DIFFICULTY) {
+      drawMenuFocusMarks(canvas, cx, difficultyMenuY, diffW)
+    }
     uiStringBuilder.setLength(0)
     appendDifficultyName(stageManager.getDifficulty().index - 1)
     val savedTag = uiSmallPaint.textSize
@@ -999,6 +1031,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       continueMenuY + uiGoldPaint.descent(),
     )
     openContinueButtonRect.inset(-hudPx(60f), -hudPx(30f))
+    if (titleMenuIndex == TITLE_ITEM_CONTINUE) {
+      drawMenuFocusMarks(canvas, cx, continueMenuY, contW)
+    }
     uiStringBuilder.setLength(0)
     appendContinueDipName(stageManager.getContinueDip())
     drawCenteredHud(canvas, uiStringBuilder, cx, continueTagY, uiSmallPaint, uiSmallShadowPaint)
@@ -1013,6 +1048,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       fighterMenuY + uiGoldPaint.descent(),
     )
     openFighterSelectButtonRect.inset(-hudPx(60f), -hudPx(30f))
+    if (titleMenuIndex == TITLE_ITEM_FIGHTER) {
+      drawMenuFocusMarks(canvas, cx, fighterMenuY, fightW)
+    }
     uiStringBuilder.setLength(0)
     if (player.chosenFighterIndex == 1) {
       uiStringBuilder.append("TYPE-02: F6F HELLCAT")
@@ -1062,6 +1100,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       val gold = selected === difficultyTiers[i]
       if (gold) {
         drawCenteredHud(canvas, uiStringBuilder, cx, lineY, uiGoldPaint, uiGoldShadowPaint)
+        drawMenuFocusMarks(
+          canvas,
+          cx,
+          lineY,
+          uiGoldPaint.measureText(uiStringBuilder, 0, uiStringBuilder.length),
+        )
       } else {
         drawCenteredHud(canvas, uiStringBuilder, cx, lineY, uiTextPaint, uiShadowPaint)
       }
@@ -1110,6 +1154,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
       appendContinueDipName(i)
       if (i == selected) {
         drawCenteredHud(canvas, uiStringBuilder, cx, lineY, uiGoldPaint, uiGoldShadowPaint)
+        drawMenuFocusMarks(
+          canvas,
+          cx,
+          lineY,
+          uiGoldPaint.measureText(uiStringBuilder, 0, uiStringBuilder.length),
+        )
       } else {
         drawCenteredHud(canvas, uiStringBuilder, cx, lineY, uiTextPaint, uiShadowPaint)
       }
@@ -1441,6 +1491,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     uiStringBuilder.append((bgmScale * 100f).toInt())
     uiStringBuilder.append('%')
     drawCenteredHud(canvas, uiStringBuilder, cx, mid - screenH * 0.14f, uiTextPaint, uiShadowPaint)
+    if (settingsAudioRow == 0) {
+      drawMenuFocusMarks(
+        canvas,
+        cx,
+        mid - screenH * 0.14f,
+        uiTextPaint.measureText(uiStringBuilder, 0, uiStringBuilder.length),
+      )
+    }
     drawVolumeGage(
       canvas,
       cx,
@@ -1457,6 +1515,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     uiStringBuilder.append((sfxScale * 100f).toInt())
     uiStringBuilder.append('%')
     drawCenteredHud(canvas, uiStringBuilder, cx, mid + screenH * 0.06f, uiTextPaint, uiShadowPaint)
+    if (settingsAudioRow == 1) {
+      drawMenuFocusMarks(
+        canvas,
+        cx,
+        mid + screenH * 0.06f,
+        uiTextPaint.measureText(uiStringBuilder, 0, uiStringBuilder.length),
+      )
+    }
     drawVolumeGage(
       canvas,
       cx,
@@ -1579,6 +1645,37 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     val cur = (current * slots + 0.5f).toInt().coerceIn(0, slots)
     val next = (if (up) cur + 1 else cur - 1).coerceIn(0, slots)
     return next / slots.toFloat()
+  }
+
+  private fun drawMenuFocusMarks(canvas: Canvas, centerX: Float, y: Float, textW: Float) {
+    val gap = hudPx(36f)
+    val leftEdge = centerX - textW * 0.5f
+    val rightEdge = centerX + textW * 0.5f
+    menuMarkBuilder.setLength(0)
+    menuMarkBuilder.append('>')
+    val markW = uiGoldPaint.measureText(menuMarkBuilder, 0, 1)
+    drawHudTextAt(
+      canvas,
+      menuMarkBuilder,
+      0,
+      1,
+      leftEdge - gap - markW,
+      y,
+      uiGoldPaint,
+      uiGoldShadowPaint,
+    )
+    menuMarkBuilder.setLength(0)
+    menuMarkBuilder.append('<')
+    drawHudTextAt(
+      canvas,
+      menuMarkBuilder,
+      0,
+      1,
+      rightEdge + gap,
+      y,
+      uiGoldPaint,
+      uiGoldShadowPaint,
+    )
   }
 
   private fun drawCenteredHud(
@@ -2807,6 +2904,309 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
     player.followTether(steerFingerX, steerFingerY, grabOffsetX, grabOffsetY, dt)
   }
 
+  private fun applyPadSteer(dt: Float) {
+    if (isDraggingShip) return
+    if (!cabinetPad.sampleSteer()) return
+    player.steerPad(cabinetPad.steerX(), cabinetPad.steerY(), dt)
+  }
+
+  private fun tickPadMenus(dt: Float) {
+    when (gameState) {
+      STATE_TITLE -> {
+        if (isSettingsMenuOpen) {
+          val dy = cabinetPad.pollMenuY(dt)
+          if (dy < 0) settingsAudioRow = 0
+          else if (dy > 0) settingsAudioRow = 1
+          val dx = cabinetPad.pollMenuX(dt)
+          if (dx != 0) {
+            val louder = dx > 0
+            if (settingsAudioRow == 0) {
+              SoundManager.instance.setBgmVolumeScale(
+                bumpVolumeScale(SoundManager.instance.getBgmVolumeScale(), louder),
+              )
+            } else {
+              SoundManager.instance.setSfxVolumeScale(
+                bumpVolumeScale(SoundManager.instance.getSfxVolumeScale(), louder),
+              )
+              SoundManager.instance.playSFX(SoundManager.SFX_VULCAN)
+            }
+            SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          }
+        } else {
+          val dy = cabinetPad.pollMenuY(dt)
+          if (dy != 0) {
+            attractCycleTimer = 0f
+            attractCycleState = ATTRACT_TITLE
+            val next = (titleMenuIndex + dy).coerceIn(0, TITLE_ITEM_COUNT - 1)
+            if (next != titleMenuIndex) {
+              titleMenuIndex = next
+              SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+            }
+          }
+        }
+      }
+      STATE_REGISTRATION -> {
+        val bump = cabinetPad.pollMenuBump(dt)
+        if (bump > 0) bumpRegistrationChar(true)
+        else if (bump < 0) bumpRegistrationChar(false)
+      }
+      STATE_CHARACTER_SELECT -> {
+        val dx = cabinetPad.pollMenuX(dt)
+        if (dx < 0) selectFighterPad(0)
+        else if (dx > 0) selectFighterPad(1)
+      }
+      STATE_CONTINUE_SELECT -> {
+        val dy = cabinetPad.pollMenuY(dt)
+        if (dy != 0) cycleContinuePad(dy > 0)
+      }
+      STATE_DIFFICULTY_SELECT -> {
+        val dy = cabinetPad.pollMenuY(dt)
+        if (dy != 0) cycleDifficultyPad(dy > 0)
+      }
+    }
+  }
+
+  private fun activateTitleMenuItem(forceStart: Boolean) {
+    if (forceStart || titleMenuIndex == TITLE_ITEM_START) {
+      beginCampaignFromMenu()
+      return
+    }
+    when (titleMenuIndex) {
+      TITLE_ITEM_AUDIO -> {
+        isSettingsMenuOpen = true
+        settingsAudioRow = 0
+        registrationTextFlashTimer = 0f
+        SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+      }
+      TITLE_ITEM_DIFFICULTY -> {
+        gameState = STATE_DIFFICULTY_SELECT
+        SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+      }
+      TITLE_ITEM_CONTINUE -> {
+        gameState = STATE_CONTINUE_SELECT
+        SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+      }
+      TITLE_ITEM_FIGHTER -> {
+        selectedFighterIndex = player.chosenFighterIndex
+        gameState = STATE_CHARACTER_SELECT
+        SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+      }
+    }
+  }
+
+  private fun returnToTitleFromSubmenu() {
+    attractCycleTimer = 0f
+    attractCycleState = ATTRACT_TITLE
+    isSettingsMenuOpen = false
+    gameState = STATE_TITLE
+    SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+  }
+
+  private fun selectFighterPad(next: Int) {
+    if (next == selectedFighterIndex) return
+    selectedFighterIndex = next
+    player.applyFighterConfiguration(next)
+    stageManager.saveFighterSetting(context, next)
+    SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+  }
+
+  private fun cycleContinuePad(forward: Boolean) {
+    val cur = stageManager.getContinueDip()
+    val next = if (forward) (cur + 1) % 3 else (cur + 2) % 3
+    stageManager.saveContinueSetting(context, next)
+    SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+  }
+
+  private fun cycleDifficultyPad(forward: Boolean) {
+    var i = 0
+    while (i < 7 && difficultyTiers[i] != stageManager.getDifficulty()) i++
+    if (i >= 7) i = 2
+    i = if (forward) {
+      if (i >= 6) 0 else i + 1
+    } else {
+      if (i <= 0) 6 else i - 1
+    }
+    stageManager.saveDifficultySetting(context, difficultyTiers[i])
+    SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+  }
+
+  private fun tryActivateBomb() {
+    if (availableBombs <= 0 || player.isGameOver() || panicBomb.isActive) return
+    availableBombs--
+    panicBomb.activate(player.getHitboxX(), player.getHitboxY())
+    ScoreManager.instance.markBombUsed()
+    bombCoreWasOpen = boss.isCoreVulnerable()
+    bossBombDmgBank = 0f
+    addScreenShake(0.8f)
+    SoundManager.instance.playSFX(SoundManager.SFX_BOMB)
+  }
+
+  fun offerGenericMotion(event: MotionEvent): Boolean {
+    if (!cabinetPad.ingestMotion(event)) return false
+    if (
+      attractCycleState == ATTRACT_CPU_DEMO || attractCycleState == ATTRACT_HIGH_SCORE
+    ) {
+      if (cabinetPad.menuStickActive()) abortAttractToTitle()
+    }
+    return true
+  }
+
+  fun offerKeyEvent(event: KeyEvent): Boolean {
+    val code = event.keyCode
+    if (CabinetPad.isVolumeOrSystem(code)) return false
+    val down = event.action == KeyEvent.ACTION_DOWN
+    if (event.repeatCount > 0) return true
+    cabinetPad.ingestKey(down, code)
+    if (
+      down &&
+      (attractCycleState == ATTRACT_CPU_DEMO || attractCycleState == ATTRACT_HIGH_SCORE)
+    ) {
+      abortAttractToTitle()
+      return true
+    }
+    if (down) return dispatchPadDown(code)
+    return true
+  }
+
+  private fun dispatchPadDown(code: Int): Boolean {
+    when (gameState) {
+      STATE_TITLE -> {
+        attractCycleTimer = 0f
+        attractCycleState = ATTRACT_TITLE
+        if (isSettingsMenuOpen) {
+          if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+            isSettingsMenuOpen = false
+            SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          }
+          return true
+        }
+        if (CabinetPad.isHangarKey(code)) {
+          titleMenuIndex = TITLE_ITEM_FIGHTER
+          selectedFighterIndex = player.chosenFighterIndex
+          gameState = STATE_CHARACTER_SELECT
+          SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          return true
+        }
+        if (CabinetPad.isDifficultyKey(code)) {
+          titleMenuIndex = TITLE_ITEM_DIFFICULTY
+          gameState = STATE_DIFFICULTY_SELECT
+          SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          return true
+        }
+        if (CabinetPad.isContinueDipKey(code)) {
+          titleMenuIndex = TITLE_ITEM_CONTINUE
+          gameState = STATE_CONTINUE_SELECT
+          SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          return true
+        }
+        if (CabinetPad.isBackKey(code)) {
+          titleMenuIndex = TITLE_ITEM_AUDIO
+          isSettingsMenuOpen = true
+          settingsAudioRow = 0
+          registrationTextFlashTimer = 0f
+          SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+          return true
+        }
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          activateTitleMenuItem(CabinetPad.isStartKey(code))
+        }
+        return true
+      }
+      STATE_CHARACTER_SELECT -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          returnToTitleFromSubmenu()
+          return true
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+          selectFighterPad(if (code == KeyEvent.KEYCODE_DPAD_LEFT) 0 else 1)
+        }
+        return true
+      }
+      STATE_CONTINUE_SELECT -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          returnToTitleFromSubmenu()
+          return true
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+          cycleContinuePad(code == KeyEvent.KEYCODE_DPAD_DOWN)
+        }
+        return true
+      }
+      STATE_DIFFICULTY_SELECT -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          returnToTitleFromSubmenu()
+          return true
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_UP ||
+          code == KeyEvent.KEYCODE_DPAD_DOWN ||
+          CabinetPad.isDifficultyKey(code) ||
+          CabinetPad.isHangarKey(code)
+        ) {
+          val forward = code == KeyEvent.KEYCODE_DPAD_DOWN || CabinetPad.isHangarKey(code)
+          cycleDifficultyPad(forward)
+        }
+        return true
+      }
+      STATE_DEMO, STATE_INTERSTITIAL -> return true
+      STATE_CLEAR -> {
+        if (
+          ScoreManager.instance.isRecapReady() &&
+          (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code))
+        ) {
+          ScoreManager.instance.resetStageCounters()
+          stageManager.advanceToNextStage()
+          if (stageManager.isCampaignFinished) {
+            campaignCompleteT = 0f
+            lastBgmRes = 0
+            SoundManager.instance.stopAlarm()
+            gameState = STATE_CAMPAIGN_COMPLETE
+          } else {
+            ScoreManager.instance.syncDifficultyMultiplier(stageManager.getDifficulty().index)
+            resetStage()
+            interstitialTimer = INTERSTITIAL_SECS
+            gameState = STATE_INTERSTITIAL
+          }
+        }
+        return true
+      }
+      STATE_GAMEOVER -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) routeAfterGameOver()
+        return true
+      }
+      STATE_CONTINUE -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) acceptContinueCredit()
+        return true
+      }
+      STATE_REGISTRATION -> {
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT ||
+          code == KeyEvent.KEYCODE_DPAD_DOWN ||
+          CabinetPad.isHangarKey(code)
+        ) {
+          bumpRegistrationChar(false)
+        } else if (code == KeyEvent.KEYCODE_DPAD_RIGHT ||
+          code == KeyEvent.KEYCODE_DPAD_UP ||
+          CabinetPad.isDifficultyKey(code)
+        ) {
+          bumpRegistrationChar(true)
+        } else if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          confirmRegistrationLetter()
+        }
+        return true
+      }
+      STATE_CAMPAIGN_COMPLETE -> {
+        if (CabinetPad.isConfirmKey(code) || CabinetPad.isStartKey(code)) {
+          if (qualifiesForRanking()) beginRegistration() else finishDemoToHighScore()
+        }
+        return true
+      }
+      STATE_PLAYING -> {
+        if (CabinetPad.isBombKey(code)) tryActivateBomb()
+        return true
+      }
+    }
+    return true
+  }
+
   private fun tryGrabShip(fingerX: Float, fingerY: Float, pointerId: Int) {
     if (isDraggingShip) return
     val gx = fingerX - player.getHitboxX()
@@ -2840,50 +3240,67 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
           val y = event.y
           if (isSettingsMenuOpen) {
             if (down) {
-              if (bgmVolumeDownRect.contains(x, y)) {
-                SoundManager.instance.setBgmVolumeScale(
-                  bumpVolumeScale(SoundManager.instance.getBgmVolumeScale(), false),
-                )
-              } else if (bgmVolumeUpRect.contains(x, y)) {
-                SoundManager.instance.setBgmVolumeScale(
-                  bumpVolumeScale(SoundManager.instance.getBgmVolumeScale(), true),
-                )
-              } else if (sfxVolumeDownRect.contains(x, y)) {
-                SoundManager.instance.setSfxVolumeScale(
-                  bumpVolumeScale(SoundManager.instance.getSfxVolumeScale(), false),
-                )
-                SoundManager.instance.playSFX(SoundManager.SFX_VULCAN)
-              } else if (sfxVolumeUpRect.contains(x, y)) {
-                SoundManager.instance.setSfxVolumeScale(
-                  bumpVolumeScale(SoundManager.instance.getSfxVolumeScale(), true),
-                )
-                SoundManager.instance.playSFX(SoundManager.SFX_VULCAN)
+              if (bgmVolumeDownRect.contains(x, y) || bgmVolumeUpRect.contains(x, y) || bgmSliderRect.contains(x, y)) {
+                settingsAudioRow = 0
+                if (bgmVolumeDownRect.contains(x, y)) {
+                  SoundManager.instance.setBgmVolumeScale(
+                    bumpVolumeScale(SoundManager.instance.getBgmVolumeScale(), false),
+                  )
+                } else if (bgmVolumeUpRect.contains(x, y)) {
+                  SoundManager.instance.setBgmVolumeScale(
+                    bumpVolumeScale(SoundManager.instance.getBgmVolumeScale(), true),
+                  )
+                }
+              } else if (sfxVolumeDownRect.contains(x, y) || sfxVolumeUpRect.contains(x, y) || sfxSliderRect.contains(x, y)) {
+                settingsAudioRow = 1
+                if (sfxVolumeDownRect.contains(x, y)) {
+                  SoundManager.instance.setSfxVolumeScale(
+                    bumpVolumeScale(SoundManager.instance.getSfxVolumeScale(), false),
+                  )
+                  SoundManager.instance.playSFX(SoundManager.SFX_VULCAN)
+                } else if (sfxVolumeUpRect.contains(x, y)) {
+                  SoundManager.instance.setSfxVolumeScale(
+                    bumpVolumeScale(SoundManager.instance.getSfxVolumeScale(), true),
+                  )
+                  SoundManager.instance.playSFX(SoundManager.SFX_VULCAN)
+                }
               } else if (backButtonRect.contains(x, y)) {
                 isSettingsMenuOpen = false
                 SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
+              } else {
+                settingsAudioRow = if (y < screenH * 0.52f) 0 else 1
               }
             }
+          } else if (down && startCreditButtonRect.contains(x, y)) {
+            titleMenuIndex = TITLE_ITEM_START
+            beginCampaignFromMenu()
           } else if (down && openSettingsButtonRect.contains(x, y)) {
+            titleMenuIndex = TITLE_ITEM_AUDIO
             isSettingsMenuOpen = true
+            settingsAudioRow = 0
             registrationTextFlashTimer = 0f
             SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
           } else if (down && openDifficultyButtonRect.contains(x, y)) {
+            titleMenuIndex = TITLE_ITEM_DIFFICULTY
             attractCycleTimer = 0f
             attractCycleState = ATTRACT_TITLE
             gameState = STATE_DIFFICULTY_SELECT
             SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
           } else if (down && openContinueButtonRect.contains(x, y)) {
+            titleMenuIndex = TITLE_ITEM_CONTINUE
             attractCycleTimer = 0f
             attractCycleState = ATTRACT_TITLE
             gameState = STATE_CONTINUE_SELECT
             SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
           } else if (down && openFighterSelectButtonRect.contains(x, y)) {
+            titleMenuIndex = TITLE_ITEM_FIGHTER
             attractCycleTimer = 0f
             attractCycleState = ATTRACT_TITLE
             selectedFighterIndex = player.chosenFighterIndex
             gameState = STATE_CHARACTER_SELECT
             SoundManager.instance.playSFX(SoundManager.SFX_PICKUP)
           } else if (down) {
+            titleMenuIndex = TITLE_ITEM_START
             beginCampaignFromMenu()
           }
         }
@@ -3028,15 +3445,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
           availableBombs > 0 &&
           !player.isGameOver()
         ) {
-          if (!panicBomb.isActive) {
-            availableBombs--
-            panicBomb.activate(player.getHitboxX(), player.getHitboxY())
-            ScoreManager.instance.markBombUsed()
-            bombCoreWasOpen = boss.isCoreVulnerable()
-            bossBombDmgBank = 0f
-            addScreenShake(0.8f)
-            SoundManager.instance.playSFX(SoundManager.SFX_BOMB)
-          }
+          tryActivateBomb()
           awaitingSecondTap = false
         }
         touchDownMs = now
@@ -3053,15 +3462,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
           availableBombs > 0 &&
           !player.isGameOver()
         ) {
-          if (!panicBomb.isActive) {
-            availableBombs--
-            panicBomb.activate(player.getHitboxX(), player.getHitboxY())
-            ScoreManager.instance.markBombUsed()
-            bombCoreWasOpen = boss.isCoreVulnerable()
-            bossBombDmgBank = 0f
-            addScreenShake(0.8f)
-            SoundManager.instance.playSFX(SoundManager.SFX_BOMB)
-          }
+          tryActivateBomb()
           awaitingSecondTap = false
         }
         touchDownMs = now
@@ -3177,6 +3578,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback,
 
   private companion object {
     const val HUD_DESIGN_WIDTH = 1080f
+    const val TITLE_ITEM_START = 0
+    const val TITLE_ITEM_AUDIO = 1
+    const val TITLE_ITEM_DIFFICULTY = 2
+    const val TITLE_ITEM_CONTINUE = 3
+    const val TITLE_ITEM_FIGHTER = 4
+    const val TITLE_ITEM_COUNT = 5
     const val STATE_TITLE = 0
     const val STATE_PLAYING = 1
     const val STATE_CLEAR = 2

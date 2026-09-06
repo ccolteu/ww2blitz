@@ -55,6 +55,7 @@ class PlayerShip(private val resources: Resources) {
   private var isDragging = false
   private var isMovingHorizontal = false
   private var autoFire = false
+  private var padFire = false
   private var classBaseSpeed = P38_SPEED
   private var responsivenessTether = P38_TETHER
   private var muzzleFrac = P38_MUZZLE_X
@@ -247,6 +248,7 @@ class PlayerShip(private val resources: Resources) {
     isDragging = false
     isMovingHorizontal = false
     autoFire = false
+    padFire = false
     pointerId = MotionEvent.INVALID_POINTER_ID
     currentFrameIndex = IDLE_FRAME
     targetFrameIndex = IDLE_FRAME
@@ -284,10 +286,29 @@ class PlayerShip(private val resources: Resources) {
   }
 
   fun isFiringHeld(): Boolean =
-    (isDragging || autoFire) && !isGameOverFlag && lives > 0 && respawnTimer <= 0f
+    (isDragging || autoFire || padFire) && !isGameOverFlag && lives > 0 && respawnTimer <= 0f
 
   fun setAutoFire(on: Boolean) {
     autoFire = on
+  }
+
+  fun setPadFire(on: Boolean) {
+    padFire = on
+  }
+
+  fun steerPad(nx: Float, ny: Float, dt: Float) {
+    if (isGameOverFlag || lives <= 0 || respawnTimer > 0f || dt <= 0f) return
+    val mag = kotlin.math.sqrt(nx * nx + ny * ny)
+    if (mag < 0.001f) return
+    val step = classBaseSpeed * PAD_SPEED * dt * responsivenessTether
+    x += nx * step
+    y += ny * step
+    targetVelocityX = nx
+    if (kotlin.math.abs(nx) > 0.18f) {
+      isMovingHorizontal = true
+    }
+    clamp()
+    writeDst()
   }
 
   fun followTether(
@@ -536,6 +557,7 @@ class PlayerShip(private val resources: Resources) {
     const val HITS_PER_LIFE = 3
     const val RESPAWN_SEC = 0.4f
     const val DEMO_SPEED = 920f
+    const val PAD_SPEED = 0.82f
     const val SHADOW_PX = 2
     const val OUTLINE_PX = 3
   }

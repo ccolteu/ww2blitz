@@ -1,8 +1,8 @@
 # WW2 Blitz
 
-Portrait Android shoot-’em-up (`com.cc.ww2blitz`), version **1.0.6**. One fighter, eight timed stages, peelable bosses. Maps are composed (`StageDef` + director + theater/boss kit), not subclassed from a `BaseLevel`. The product is a 1990s arcade cabinet: attract while idle, one linear credit, briefing cards, time-scripted waves, a tiny hitbox, a panic bomb, a recap ticker, and three-letter name entry.
+Portrait Android shoot-’em-up (`com.cc.ww2blitz`), version **1.0.7**. One fighter, eight timed stages, peelable bosses. Maps are composed (`StageDef` + director + theater/boss kit), not subclassed from a `BaseLevel`. The product is a 1990s arcade cabinet: attract while idle, one linear credit, briefing cards, time-scripted waves, a tiny hitbox, a panic bomb, a recap ticker, and three-letter name entry.
 
-**Play Store.** Orbit Threshold is an ascent: mute alien escorts rise from the bottom, flank you in three pairs, swipe off the sides, then the fortress takes the sky.
+**Play Store.** Hold a Retroid in portrait with ABXY and the **right** stick at the bottom of the glass. That hand stays off the sky. Phone still uses the thumb leash.
 
 The software is a Kotlin engine on one `SurfaceView`, clocked by `Choreographer`. Combat is not a Compose tree. The hot path does not allocate.
 
@@ -85,6 +85,7 @@ This is the full inventory. Nothing in the engine is “just a UI preference”;
 | 62 | Peel must change the pot | Warning sting + `bgm_boss` / `bgm_boss2` when the core opens | [Audio](#27-audio) |
 | 63 | Mid-stage armor without a ninth map | Captain `isMidBoss` on 3–6; dive off before fortress; no second peel | [Director](#18-time-scripted-director) |
 | 65 | Orbit must feel like an ascent, not an empty gate | Mute escort pairs (`FLIGHT_PROFILE_ORBIT_ESCORT`); `introOnly` still ticks the director | [Director](#18-time-scripted-director) |
+| 66 | A handheld cabinet must take a stick | `CabinetPad`: right stick + ABXY at the bottom; portrait `steerX = −stickY`; menus A confirm | [Player motion](#12-player-motion) |
 
 ```mermaid
 flowchart TB
@@ -147,7 +148,7 @@ flowchart TB
 
 **Why.** One content view means one canvas and one input stream. Keeping the screen on and binding `STREAM_MUSIC` matches “the machine is on.” Pause/destroy is where volumes are saved and `SoundPool`/`MediaPlayer` die, so combat never constructs audio objects.
 
-**Implementation.** `MainActivity.onCreate`: `requestedOrientation = PORTRAIT`, `setDecorFitsSystemWindows(false)`, hide system bars, `FLAG_KEEP_SCREEN_ON`, `volumeControlStream = STREAM_MUSIC`, `SoundManager.instance.initialize(this)`, `setContentView(GameView(this))`. Manifest: `screenOrientation=portrait`, `resizeableActivity=false`, `appCategory=game`, plus Android 16 large-screen opt-outs so tablets do not ignore the portrait lock. `onPause` saves audio and pauses; `onResume` resumes; `onDestroy` releases. No fragments, no Compose. Viewport size is applied once through `applyViewportSize`: first valid size boots the title stage; later same-size `surfaceChanged`/`onSizeChanged` pairs do not rewind attract or teleport the ship. `surfaceCreated` does not reset the attract cursor.
+**Implementation.** `MainActivity.onCreate`: `requestedOrientation = PORTRAIT`, `setDecorFitsSystemWindows(false)`, hide system bars, `FLAG_KEEP_SCREEN_ON`, `volumeControlStream = STREAM_MUSIC`, `SoundManager.instance.initialize(this)`, `setContentView(GameView(this))`. Manifest: `screenOrientation=portrait`, `resizeableActivity=false`, `appCategory=game`, `gamepad` feature optional, plus Android 16 large-screen opt-outs so tablets do not ignore the portrait lock. `dispatchKeyEvent` / `dispatchGenericMotionEvent` forward to `GameView.offerKeyEvent` / `offerGenericMotion` so a Retroid-class pad is not eaten by the window. `onPause` saves audio and pauses; `onResume` resumes; `onDestroy` releases. No fragments, no Compose. Viewport size is applied once through `applyViewportSize`: first valid size boots the title stage; later same-size `surfaceChanged`/`onSizeChanged` pairs do not rewind attract or teleport the ship. `surfaceCreated` does not reset the attract cursor; it `requestFocus()` so keys land.
 
 ---
 
@@ -159,7 +160,7 @@ flowchart TB
 
 **Why.** Vsync is the cabinet’s scanline analog. Clamping `dt` (50 ms / `MAX_FRAME_NS`) bounds simulation when a frame is late. Hardware canvas keeps blit on the GPU path. `setWillNotDraw(true)` avoids a second software `onDraw`.
 
-**Implementation.** `surfaceCreated` sets `running`, zeros `lastNanos`, `postFrameCallback`. `doFrame` computes `dt`, runs the `when (gameState)` update, draws, `unlockCanvasAndPost`, posts the next callback. `surfaceDestroyed` removes the callback. Departments receive the same `dt`. Title / difficulty / character select do **not** tick parallax. Interstitial only decrements `interstitialTimer`. Play tick order: parallax → **thumb leash** (`followTether`) → `player.update` → player bullets/missiles → pickups (medal magnet) → floating scores → timeline → enemies → boss → enemy shots → bomb → particles → collisions → boss FX flags → clear. Demo uses `demoPilot` / `steerToward` instead of the leash.
+**Implementation.** `surfaceCreated` sets `running`, zeros `lastNanos`, `postFrameCallback`. `doFrame` computes `dt`, runs the `when (gameState)` update, draws, `unlockCanvasAndPost`, posts the next callback. `surfaceDestroyed` removes the callback. Departments receive the same `dt`. Title / difficulty / character select do **not** tick parallax. Interstitial only decrements `interstitialTimer`. Play tick order: parallax → **thumb leash** (`followTether`) → **pad steer** (`steerPad`) → `player.update` → player bullets/missiles → pickups (medal magnet) → floating scores → timeline → enemies → boss → enemy shots → bomb → particles → collisions → boss FX flags → clear. Demo uses `demoPilot` / `steerToward` instead of the leash.
 
 Paint: optional world `save`/`translate`/`restore` for shake → background → sprites → flash quad → HUD.
 
@@ -226,7 +227,7 @@ Empty-glass tap on title calls `beginCampaignFromMenu()` only after settings / d
 
 **Why.** A fake “attract-only” spawn list would desync from the product. Reusing the director means the window always shows shippable waves. Forbidding insert keeps the operator table honest.
 
-**Implementation.** Cold start paints `title_screen_backdrop` as `windowBackground` plus a center-cropped `ImageView`; `GameView` is posted onto that stack so the still is up before pools/audio hitch. `ATTRACT_TITLE_SECS = 4`, `ATTRACT_DEMO_SECS = 30`, `ATTRACT_HIGH_SCORE_SECS = 4`. Title footer: CREDIT line, then `VER` plus `PackageManager` `versionName` (cached at `GameView` init), both `uiSmallPaint` / arcade face. Ranking card is **TOP SCORES** plus the saved dip name; rows read `HighScoreManager` for that `Difficulty.index` only. On title timeout, `beginDemo()` picks a catalog map that is not `introOnly`, skipping `lastDemoStage` when more than one attract map exists. `demoPilot` steers toward the lowest living enemy or boss part, sidesteps nearby downward bullets, sine-wanders if idle (`DEMO_SPEED`). `resolveEnemyBulletsVsPlayer(..., awardScore = false)`. Touch on demo or ranking returns to interactive title. Surface recreate does **not** force `ATTRACT_TITLE`; ranking can survive a flap. `HighScoreManager` insert is not called on this path.
+**Implementation.** Cold start paints `title_screen_backdrop` as `windowBackground` plus a center-cropped `ImageView`; `GameView` is posted onto that stack so the still is up before pools/audio hitch. `ATTRACT_TITLE_SECS = 4`, `ATTRACT_DEMO_SECS = 30`, `ATTRACT_HIGH_SCORE_SECS = 4`. Title footer: CREDIT line, then `VER` plus `PackageManager` `versionName` (cached at `GameView` init), both `uiSmallPaint` / arcade face. Ranking card is **TOP SCORES** plus the saved dip name; rows read `HighScoreManager` for that `Difficulty.index` only. On title timeout, `beginDemo()` picks a catalog map that is not `introOnly`, skipping `lastDemoStage` when more than one attract map exists. `demoPilot` steers toward the lowest living enemy or boss part, sidesteps nearby downward bullets, sine-wanders if idle (`DEMO_SPEED`). `resolveEnemyBulletsVsPlayer(..., awardScore = false)`. Touch **or a cabinet button** on demo or ranking returns to interactive title. Surface recreate does **not** force `ATTRACT_TITLE`; ranking can survive a flap. `HighScoreManager` insert is not called on this path.
 
 ---
 
@@ -356,13 +357,28 @@ Then `STAGE_SEQUENCE = intArrayOf(3, 8, 6, 6)`. No new director class if the wav
 
 ## 12. Player motion (thumb leash)
 
-**Need.** Putting the plane under the thumb hides the sprite. Relative drag (ship += finger delta) lets the finger run away: the plane is no longer where you are pointing, and a 40 px clamp on **that delta** never acts like a leash. Cabinets and phone STGs treat the stick/thumb as a **rubber band to a grab point**.
+**Need.** Putting the plane under the thumb hides the sprite. Relative drag (ship += finger delta) lets the finger run away: the plane is no longer where you are pointing, and a 40 px clamp on **that delta** never acts like a leash. Cabinets and phone STGs treat the stick/thumb as a **rubber band to a grab point**. A Retroid-class handheld is a cabinet: the same ship must take a stick without a second control scheme fighting the leash.
 
-**Choice.** Arcade rubber band. On a grab inside `touchGrabRadius`, store `grabOffset = finger − ship`. Every play frame, the target is **`finger − grabOffset`** (grab the wing, the plane does not jump under the thumb). `PlayerShip.followTether` chases that target. Error longer than `TETHER_LIMIT_PX` (40) is scaled down to 40 px — that is the throw of the leash, **ship vs target**, not “this `ACTION_MOVE` sample.” Then `maxMove = classBaseSpeed * dt`; if the (already leashed) step is still over budget, scale it and multiply Hellcat by `responsivenessTether` 0.82. Inside the budget the ship sits on the target (1:1 micro-dodges). `clamp()` in the same call so a bezel hit drops leftover error. Touch only **writes** the current finger; motion is applied **once** in `doFrame` so extra MOVE events cannot buy extra speed.
+**Choice.** Arcade rubber band on glass. On a grab inside `touchGrabRadius`, store `grabOffset = finger − ship`. Every play frame, the target is **`finger − grabOffset`** (grab the wing, the plane does not jump under the thumb). `PlayerShip.followTether` chases that target. Error longer than `TETHER_LIMIT_PX` (40) is scaled down to 40 px — that is the throw of the leash, **ship vs target**, not “this `ACTION_MOVE` sample.” Then `maxMove = classBaseSpeed * dt`; if the (already leashed) step is still over budget, scale it and multiply Hellcat by `responsivenessTether` 0.82. Inside the budget the ship sits on the target (1:1 micro-dodges). `clamp()` in the same call so a bezel hit drops leftover error. Touch only **writes** the current finger; motion is applied **once** in `doFrame` so extra MOVE events cannot buy extra speed.
 
-**Why.** The leash is what the operator’s hand expects: the plane wants to stay at the same offset from the thumb. A flick stretches the band; the ship catches up at class speed instead of teleporting or being left in another county. Hellcat 0.82 is weight on **over-budget** chases only. P-38 1.0 stays instant at the cap. Grab-offset is why you can hold the boom and still see the nose.
+Pad is a second writer of the same speed cap, not a second physics. `CabinetPad` matches Retroid / RP5 / RP6 / Anbernic / Odin by **device name** (the pad often reports `isExternal`). Hold the shell in portrait so **ABXY, Start, and the right stick sit at the bottom** of the glass. Stick axes stay landscape-native, so portrait play is `steerX = −stickY`, `steerY = stickX`. Xbox / DualShock / DualSense keep a standard left stick.
 
-**Implementation.** `ACTION_DOWN` that hits the grab disk sets `isDraggingShip`, `grabOffsetX/Y`, and `steerFingerX/Y`. `ACTION_MOVE` updates the finger for `dragPointerId` only. `doFrame` (`STATE_PLAYING`) calls `applyShipTether` → `followTether(finger, offset, dt)` **before** `player.update`. Early-out if error ≤ 0.001. If `dist > 40`, `dx,dy *= 40/dist`. If `dist > maxMove`, `x/y += dx * (maxMove/dist) * responsivenessTether`; else `x/y += dx, dy`. Bank: `|dx| > MOVE_THRESHOLD`. Demo still uses `steerToward` at `DEMO_SPEED` (no leash). Lift finger: `isDraggingShip = false`; vulcan hold is `PlayerShip.isDragging` from `onTouch`.
+| Where | Right stick | Face (bottom cluster) |
+| --- | --- | --- |
+| Sky | Fly (nudge weave, rim dash) | Hold **A** vulcan. **B** one bomb. |
+| Title | Up / down walks **1P START → AUDIO → DIFFICULTY → CONTINUE → FIGHTER** (yellow `>` `<`) | **A** opens the caret row (credit if START). **Start** always credits. Shortcuts: **Y** difficulty, **X** fighter, **B** audio. |
+| Difficulty | Up / down cycles dips | **A** / **Start** lock and return |
+| Continue dip | Up / down (same as difficulty) | **A** / **Start** lock and return |
+| Fighter | Left / right P-38 / Hellcat | **A** / **Start** lock and return |
+| Audio | Up / down BGM vs SFX; left / right volume | **A** / **Start** return |
+| Initials | Dominant axis bumps the letter | **A** / **Start** lock |
+| Recap / GAME OVER / CONTINUE? | — | **A** / **Start** |
+
+Attract demo: a face button or a stick flick returns to title. Volume / Android Back stay with the system.
+
+**Why.** The leash is what the operator’s hand expects on a phone: the plane wants to stay at the same offset from the thumb. A flick stretches the band; the ship catches up at class speed instead of teleporting or being left in another county. Hellcat 0.82 is weight on **over-budget** chases only. P-38 1.0 stays instant at the cap. Grab-offset is why you can hold the boom and still see the nose. Portrait hold rotates landscape stick axes (`−Y → X`, `X → Y`) so the bottom-right stick matches the sky.
+
+**Implementation.** `ACTION_DOWN` that hits the grab disk sets `isDraggingShip`, `grabOffsetX/Y`, and `steerFingerX/Y`. `ACTION_MOVE` updates the finger for `dragPointerId` only. `doFrame` (`STATE_PLAYING`) calls `applyShipTether` → `followTether(finger, offset, dt)`, then `applyPadSteer` → `steerPad`, then `setPadFire`, **before** `player.update`. Early-out if error ≤ 0.001. If `dist > 40`, `dx,dy *= 40/dist`. If `dist > maxMove`, `x/y += dx * (maxMove/dist) * responsivenessTether`; else `x/y += dx, dy`. Bank: `|dx| > MOVE_THRESHOLD`. `isFiringHeld` is dragging **or** `padFire`. Demo still uses `steerToward` at `DEMO_SPEED` (no leash, no pad). Lift finger: `isDraggingShip = false`; vulcan hold is `PlayerShip.isDragging` from `onTouch`. Keys: `offerKeyEvent` ignores volume/Back; repeats are eaten; `ingestKey` tracks fire holds so stacked **A** cannot stick the gun.
 
 | | P-38 | Hellcat |
 | --- | --- | --- |
@@ -389,11 +405,11 @@ Then `STAGE_SEQUENCE = intArrayOf(3, 8, 6, 6)`. No new director class if the wav
 
 **Need.** A bomb is a rare panic, not a second vulcan. Same tap as fire would dump stock. A 0.5 s blast must not delete a boss core through armor in one frame, nor tickle it.
 
-**Choice.** Double-tap (280 ms, pixel slop) spends one bomb. Credit start is **2** (`START_BOMBS`); stock still caps at 3. Damage is DPS accumulated in a float bank, applied as ints, AABB vs enemies/boss parts, shots cancelled inside the blast rect.
+**Choice.** Double-tap (280 ms, pixel slop) spends one bomb on glass. A pad **B** spends the same stock through `tryActivateBomb` (one press, not a double-tap). Credit start is **2** (`START_BOMBS`); stock still caps at 3. Damage is DPS accumulated in a float bank, applied as ints, AABB vs enemies/boss parts, shots cancelled inside the blast rect.
 
-**Why.** Gesture isolation is how cabinets separated buttons. DPS+bank is frame-rate stable. Cancelling bullets is the Psikyo bomb language.
+**Why.** Gesture isolation is how cabinets separated buttons. A face button is that isolation on a handheld. DPS+bank is frame-rate stable. Cancelling bullets is the Psikyo bomb language.
 
-**Implementation.** `GameView.onTouchEvent` on `ACTION_UP` compares time/distance to `lastTapUpMs`. `PanicBomb.activate` at player XY; 6 frames × 0.083 s. `updatePanicBomb` grows `bombDstRect`, deactivates enemy shots inside it, `enemyBombDmgBank += BOMB_ENEMY_DPS * dt` (250), same idea for boss (`bossBombDmgBank`) with a cap so an open core is not deleted in one pulse. Heavies shudder on bomb chips. Extra **B** at 3 stock pays `BOMB_FULL_SCORE` (5000) + popup; extra **P** at power 3 pays `POWERUP_FULL_SCORE` (2000, medal face) + popup. Neither is discarded.
+**Implementation.** `GameView.onTouchEvent` on `ACTION_UP` compares time/distance to `lastTapUpMs`. Pad bomb is `dispatchPadDown` in `STATE_PLAYING`. Both call `tryActivateBomb`. `PanicBomb.activate` at player XY; 6 frames × 0.083 s. `updatePanicBomb` grows `bombDstRect`, deactivates enemy shots inside it, `enemyBombDmgBank += BOMB_ENEMY_DPS * dt` (250), same idea for boss (`bossBombDmgBank`) with a cap so an open core is not deleted in one pulse. Heavies shudder on bomb chips. Extra **B** at 3 stock pays `BOMB_FULL_SCORE` (5000) + popup; extra **P** at power 3 pays `POWERUP_FULL_SCORE` (2000, medal face) + popup. Neither is discarded.
 
 ---
 
