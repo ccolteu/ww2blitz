@@ -1,0 +1,34 @@
+To: developer@evercade.co.uk
+Subject: Developer program submission — WW2 Blitz (portrait arcade STG)
+
+Hello,
+
+I would like to submit WW2 Blitz for the Evercade Developer Program.
+
+Name: Claudiu Colteu
+Contact: [YOUR EMAIL]
+          [YOUR PHONE, optional]
+Studio / developer: [solo / studio name]
+Title: WW2 Blitz
+Programming language / tools: Kotlin on Android (custom engine: SurfaceView, Choreographer, hardware canvas, fixed sprite pools). No Unity, no GameMaker. I would port the host to C/C++ and SDL2 / OpenGLES with your SDK so it is a native Evercade binary.
+
+Details
+Genre: vertical shoot-’em-up (STG), one player, offline.
+Style: 1990s arcade cabinet — attract mode, one linear credit, eight timed operations, peelable fortresses, recap ticker, three-letter name entry. Pixel art with green chroma, WWII fighters that climb into an orbit stage.
+Players: 1. Local ranking only. No accounts, ads, or in-app purchases.
+
+The campaign is CLOUD FORTRESS, IRON TREADS, STEEL ATLANTIC, FROZEN FRONT, CORAL ATOLL, JUNGLE RUINS, ASCENT CANOPY, ORBIT THRESHOLD. Two ships (P-38 Lightning, F6F Hellcat), medals, graze, panic bomb, operator dips for difficulty and continues. The board is for a 1CC.
+
+It is already a finished product on Google Play as WW2 Blitz 1.0.6 (com.cc.ww2blitz):
+[PLAY STORE URL]
+
+Why Evercade
+The game is authored as a physical cabinet, not a live-service phone title. Portrait TATE on Evercade EXP is the screen it was built for. Stick + two buttons (move, hold-to-fire, bomb) is a cleaner control scheme than the current thumb leash, and I would implement that as part of the port. Super Pocket 320×240 would need a separate HUD/art pass; I would treat EXP / VS as the primary targets unless you want that SKU too.
+
+I can send an APK, a short capture, and box-art posters (attached). Happy to discuss publishing on Indie Heroes, a dual cart, or a publisher collection.
+
+Thank you for reading.
+
+Claudiu Colteu
+[YOUR EMAIL]
+[WEBSITE OR PLAY LISTING]
